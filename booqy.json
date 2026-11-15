@@ -1,5 +1,22 @@
 {
-  "slug": "",
-  "name": "",
-  "environments": {}
+  "slug": "hello-world",
+  "name": "Hello World",
+  "environments": {
+    "dev": {
+      "tenantId": "01m7g2pp8k0r43j0mq3nc5ame8",
+      "apiBaseUrl": "https://dh2m5ildm7.execute-api.eu-north-1.amazonaws.com",
+      "menuImageBaseUrl": "https://d3kaislpxcbglq.cloudfront.net",
+      "stripePublishableKey": "pk_test_51U4OsHHhsMraauJUMyW7ID1lQq1jsS3Pdtzqu04WDgEnJW8VQIvGktIUNMPo8cZNgIRYPafALaLKQxLfckdiXOKX00LbiD1Obc",
+      "turnstileSiteKey": "1x00000000000000000000AA",
+      "previewUrl": "https://hello-world.test-dev.booqy.se"
+    },
+    "test": {
+      "tenantId": "01m7g2pp8k0r43j0mq3nc5ame8",
+      "apiBaseUrl": "https://dh2m5ildm7.execute-api.eu-north-1.amazonaws.com",
+      "menuImageBaseUrl": "https://d3kaislpxcbglq.cloudfront.net",
+      "stripePublishableKey": "pk_test_51U4OsHHhsMraauJUMyW7ID1lQq1jsS3Pdtzqu04WDgEnJW8VQIvGktIUNMPo8cZNgIRYPafALaLKQxLfckdiXOKX00LbiD1Obc",
+      "turnstileSiteKey": "1x00000000000000000000AA",
+      "previewUrl": "https://hello-world.test.booqy.se"
+    }
+  }
 }
