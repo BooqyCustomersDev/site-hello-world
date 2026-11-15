@@ -1,0 +1,33 @@
+# Writes package-lock.json for the current package.json and commits it to
+# the branch it runs on (Actions -> Lockfile -> Run workflow). For when
+# package.json was changed without npm (the lock is what CI installs).
+name: Lockfile
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: https://npm.pkg.github.com
+          scope: "@bookingsystemadvancedorg"
+      - run: npm install --package-lock-only --no-audit --no-fund
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit
+        run: |
+          git diff --quiet package-lock.json 2>/dev/null && git ls-files --error-unmatch package-lock.json >/dev/null 2>&1 && { echo "unchanged"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: package-lock.json"
+          git push

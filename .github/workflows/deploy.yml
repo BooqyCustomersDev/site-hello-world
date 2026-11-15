@@ -1,0 +1,177 @@
+# Deploys this restaurant's site. Every value comes from repo variables that
+# Booqy writes when the customer is created (none of them is a secret):
+#
+#   BooqyCustomers (real customers, prod console):
+#     dev  -> DEV_*  -> dev account, https://<slug>.dev.booqy.se
+#     main -> PROD_* -> prod account, https://<slug>.booqy.se (and the
+#             restaurant's own domain once attached; never required)
+#   BooqyCustomersDev (test customers, dev console):
+#     dev  -> DEV_*          -> dev account sandbox, https://<slug>.test-dev.booqy.se
+#     main -> SANDBOX_MAIN_* -> dev account sandbox, https://<slug>.test.booqy.se
+#
+# main uses PROD_* when PROD_AWS_ROLE_ARN is set, else SANDBOX_MAIN_*; a
+# repo has only one of the two. *_SITE_PREFIX is the folder in the bucket
+# (default sites; the sandbox has main/sites and dev/sites), BOOQY_ENV the
+# booqy.json section (prod, test or dev).
+#
+# Rollback: Actions -> Deploy -> Run workflow on the branch (dev or main),
+# with the full SHA of an older commit on it. Seconds; the bucket also keeps
+# the previous build for 30 days.
+name: Deploy
+
+on:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Rollback: full SHA of an older commit on this branch (empty: the branch head)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Skipped (shown as skipped, not as a deploy) until Booqy has set this
+    # branch's environment up.
+    if: (github.ref_name == 'dev' && vars.DEV_AWS_ROLE_ARN != '') || (github.ref_name == 'main' && (vars.PROD_AWS_ROLE_ARN != '' || vars.SANDBOX_MAIN_AWS_ROLE_ARN != ''))
+    runs-on: ubuntu-latest
+    steps:
+      # Picks this branch's variables (see the top) into the environment of
+      # every later step: BOOQY_ENV, ROLE_ARN, BUCKET, TENANT_ID,
+      # API_BASE_URL, SITE_PREFIX.
+      - name: This environment is set up
+        id: setup
+        env:
+          VARS: ${{ toJSON(vars) }}
+        run: |
+          set -euo pipefail
+          var() { jq -r --arg k "$1" '.[$k] // empty' <<<"$VARS"; }
+          if [ "$GITHUB_REF_NAME" = main ]; then
+            if [ -n "$(var PROD_AWS_ROLE_ARN)" ]; then p=PROD_; booqy_env="prod"; else p=SANDBOX_MAIN_; booqy_env="test"; fi
+          else
+            p=DEV_; booqy_env="dev"
+          fi
+          role=$(var "${p}AWS_ROLE_ARN"); bucket=$(var "${p}SITE_BUCKET"); tenant=$(var "${p}TENANT_ID")
+          api=$(var "${p}API_BASE_URL"); prefix=$(var "${p}SITE_PREFIX")
+          {
+            echo "BOOQY_ENV=$booqy_env"
+            echo "ROLE_ARN=$role"
+            echo "BUCKET=$bucket"
+            echo "TENANT_ID=$tenant"
+            echo "API_BASE_URL=$api"
+            echo "SITE_PREFIX=${prefix:-sites}"
+          } >> "$GITHUB_ENV"
+          if [ -z "$role" ] || [ -z "$bucket" ] || [ -z "$tenant" ]; then
+            echo "::notice::No $booqy_env customer for this repo yet (created in Booqy Console) - nothing to deploy."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploying ${p}* ($booqy_env) to $bucket/${prefix:-sites}/$tenant/"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.setup.outputs.ready == 'true'
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: A rollback deploys only a commit on this branch
+        if: steps.setup.outputs.ready == 'true' && inputs.sha != ''
+        env:
+          SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$SHA" "origin/$GITHUB_REF_NAME" || { echo "::error::$SHA is not on $GITHUB_REF_NAME"; exit 1; }
+          echo "deploying $(git log -1 --format='%h %s (%ci)' "$SHA")"
+
+      # main deploys (prod, and a test customer's main) only for a restaurant
+      # that is active in Booqy. An own domain is optional: without one (or
+      # before it is verified) the site is live on its slug address
+      # (booqy.json previewUrl, <slug>.booqy.se or <slug>.test.booqy.se).
+      - name: Restaurant is active (own domain when verified, else the slug address)
+        if: steps.setup.outputs.ready == 'true' && env.BOOQY_ENV != 'dev'
+        run: |
+          set -euo pipefail
+          status=$(curl -s -o site-config.json -w '%{http_code}' "$API_BASE_URL/site-config?tenantId=$TENANT_ID")
+          [ "$status" = 200 ] || { echo "::error::The restaurant is not active in $BOOQY_ENV (site-config answered $status)."; exit 1; }
+          domain=""
+          [ "$BOOQY_ENV" = prod ] && domain=$(jq -r '.tenant.domain // empty' site-config.json)
+          if [ -n "$domain" ]; then
+            echo "DOMAIN=$domain" >> "$GITHUB_ENV"
+            echo "going live on https://$domain"
+          else
+            echo "::notice::No own domain attached yet: going live on the slug address only."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.setup.outputs.ready == 'true'
+        with:
+          node-version: "24"
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: "@bookingsystemadvancedorg"
+
+      - name: Install
+        if: steps.setup.outputs.ready == 'true'
+        run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lint, test, build
+        if: steps.setup.outputs.ready == 'true'
+        run: |
+          npm run lint
+          npm test
+          npm run build
+          test -f dist/index.html
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.setup.outputs.ready == 'true'
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: eu-north-1
+
+      # Proof on every deploy that this repo's role can't touch another
+      # restaurant's site: the write must be refused.
+      - name: Isolation check (another folder must be refused)
+        if: steps.setup.outputs.ready == 'true'
+        run: |
+          if echo probe | aws s3 cp - "s3://$BUCKET/$SITE_PREFIX/isolation-probe-$TENANT_ID/probe.txt" 2> probe.err; then
+            aws s3 rm "s3://$BUCKET/$SITE_PREFIX/isolation-probe-$TENANT_ID/probe.txt" || true
+            echo "::error::This deploy role could write outside $SITE_PREFIX/$TENANT_ID/ - stop and tell Booqy."; exit 1
+          fi
+          grep -q AccessDenied probe.err || { cat probe.err; echo "::error::expected AccessDenied"; exit 1; }
+          echo "refused as it should be"
+
+      - name: Deploy to <prefix>/<tenantId>/
+        if: steps.setup.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          # Hashed files: cached for a year. index.html: never cached, so a
+          # deploy is live at once without a CloudFront invalidation.
+          aws s3 sync dist/ "s3://$BUCKET/$SITE_PREFIX/$TENANT_ID/" --delete \
+            --cache-control "public,max-age=31536000,immutable" --exclude index.html
+          aws s3 cp dist/index.html "s3://$BUCKET/$SITE_PREFIX/$TENANT_ID/index.html" \
+            --cache-control "no-cache,no-store,must-revalidate"
+
+      - name: The site answers
+        if: steps.setup.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          url=${DOMAIN:+https://$DOMAIN}
+          url=${url:-$(jq -r ".environments.$BOOQY_ENV.previewUrl // empty" booqy.json)}
+          [ -n "$url" ] || { echo "::notice::No address to check yet."; exit 0; }
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS "$url/" | grep -q '<div id="root">'; then echo "live on $url"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::$url does not serve the site"; exit 1

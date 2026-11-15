@@ -1,0 +1,54 @@
+# Pull requests: lint, test and build. A Dependabot PR that bumps
+# @bookingsystemadvancedorg/site-kit by a patch version is merged once that passes (private
+# repos on GitHub Free have no auto-merge) and dev is deployed.
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      # main: prod (BooqyCustomers) or test (BooqyCustomersDev, SANDBOX_MAIN_*)
+      BOOQY_ENV: ${{ github.base_ref != 'main' && 'dev' || (vars.PROD_AWS_ROLE_ARN == '' && vars.SANDBOX_MAIN_AWS_ROLE_ARN != '' && 'test' || 'prod') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: "@bookingsystemadvancedorg"
+      - run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  site-kit-patch:
+    needs: check
+    if: github.actor == 'dependabot[bot]' && github.base_ref == 'dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@v2
+      - name: Merge a site-kit patch and deploy dev
+        if: steps.meta.outputs.dependency-names == '@bookingsystemadvancedorg/site-kit' && steps.meta.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh pr merge "$PR" --squash
+          # A merge made with this token starts no push workflow; start the deploy.
+          gh workflow run deploy.yml --ref dev --repo "$GITHUB_REPOSITORY"

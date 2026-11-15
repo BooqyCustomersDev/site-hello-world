@@ -1,0 +1,13 @@
+# @bookingsystemadvancedorg/site-kit updates as PRs to dev. Patch versions merge themselves
+# once CI is green (workflows/ci.yml); minor and major wait for a person.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: daily
+    allow:
+      - dependency-name: "@bookingsystemadvancedorg/site-kit"
+    commit-message:
+      prefix: "chore(deps)"

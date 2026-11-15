@@ -1,0 +1,29 @@
+/* Sajtens typsnitt. Tokens och grund kommer från @bookingsystemadvancedorg/site-kit/styles.css
+   (theme.css där), skalet från src/site.css.
+
+   Världen är Booqys bongrail (samma som booqy.se): en skrivbordsyta i
+   papperston, och allt som betyder något tryckt på kvittopapper med riven
+   underkant. Archivo (bred och tung) är kvittots rubrikröst och brödtext,
+   Martian Mono är det skrivaren skriver: tider, priser, bordsnummer,
+   statusar. Restaurangens egen färg (branding.primaryColor ->
+   --tenant-accent*, satt av SiteProvider) äger skalet: headerbandet, heron,
+   huvudknapparna, valt datum och brickans knappar. Utan egen färg används
+   Booqys vinröda. Ljust och mörkt läge följer besökarens system. */
+
+@font-face {
+  font-family: 'Archivo';
+  src: url('./assets/fonts/archivo.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Martian Mono';
+  src: url('./assets/fonts/martian-mono.woff2') format('woff2-variations');
+  font-weight: 100 800;
+  font-stretch: 75% 112.5%;
+  font-style: normal;
+  font-display: swap;
+}
