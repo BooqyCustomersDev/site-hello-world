@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useLocationInfo, useSite } from '@bookingsystemadvancedorg/site-kit'
+import { PhoneLink, Select, useLocationInfo, useSite } from '@bookingsystemadvancedorg/site-kit'
 
 const SUBJECT_OPTIONS = [
   { value: 'rekommendation', label: 'Rekommendation' },
@@ -42,14 +42,16 @@ export default function KontaktPage() {
         <p className="hero-sub">Skicka ett meddelande till oss. Vi återkommer så snart vi kan.</p>
         {(phone || address) && (
           <p className="hero-sub">
-            {[address, phone].filter(Boolean).join(' · ')}
+            {address}
+            {address && phone && ' · '}
+            {phone && <PhoneLink phone={phone} />}
           </p>
         )}
       </section>
 
       {!email && (
         <p className="notice" role="status">
-          {phone ? `Ring oss på ${phone}.` : 'Kontaktuppgifter saknas just nu.'}
+          {phone ? <>Ring oss på <PhoneLink phone={phone} />.</> : 'Kontaktuppgifter saknas just nu.'}
         </p>
       )}
 
@@ -83,22 +85,15 @@ export default function KontaktPage() {
 
         <div className="contact-form-field">
           <label htmlFor="kontakt-subject">Ämne</label>
-          <select
+          <Select
             id="kontakt-subject"
             name="subject"
             required
             value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-          >
-            <option value="" disabled>
-              Välj ämne
-            </option>
-            {SUBJECT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            onChange={setSubject}
+            placeholder="Välj ämne"
+            options={SUBJECT_OPTIONS}
+          />
         </div>
 
         <div className="contact-form-field">
