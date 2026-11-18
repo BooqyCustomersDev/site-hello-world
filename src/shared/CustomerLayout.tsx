@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   OfferCard,
   OpeningHoursModal,
+  PhoneLink,
+  SkelCard,
   ThemeToggle,
   openStatus,
   trackPage,
@@ -41,6 +43,8 @@ export function CustomerLayout() {
     ...(tenant.features.reservations ? [{ to: '/boka-bord', label: 'Boka bord' }] : []),
     ...(tenant.features.ordering && current.ordering?.pickup ? [{ to: '/bestall', label: 'Beställ' }] : []),
     ...(tenant.features.catering && current.catering ? [{ to: '/catering', label: 'Catering' }] : []),
+    ...(tenant.features.giftCards ? [{ to: '/presentkort', label: 'Presentkort' }] : []),
+    ...(tenant.features.events ? [{ to: '/evenemang', label: 'Evenemang' }] : []),
   ]
   const RIGHT_NAV: NavItem[] = [
     ...(tenant.branding.about ? [{ to: '/om-oss', label: 'Om oss' }] : []),
@@ -212,7 +216,9 @@ export function CustomerLayout() {
 
       <main className="site-main">
         <div className="page" key={`${current.locationId}:${pathname}`}>
-          <Outlet />
+          <Suspense fallback={<SkelCard label="Hämtar sidan" />}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
 
@@ -238,7 +244,7 @@ export function CustomerLayout() {
           <div>
             <h3>Adress &amp; kontakt</h3>
             {location.address && <p>{location.address}</p>}
-            {location.phone && <p><a href={`tel:${location.phone.replace(/[^\d+]/g, '')}`}>{location.phone}</a></p>}
+            {location.phone && <p><PhoneLink phone={location.phone} /></p>}
             {location.email && <p><a href={`mailto:${location.email}`}>{location.email}</a></p>}
           </div>
         </div>

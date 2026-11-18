@@ -54,6 +54,20 @@ describe('App on SiteProvider', () => {
     expect(screen.queryByRole('link', { name: 'Boka bord' })).not.toBeInTheDocument()
   })
 
+  it('shows Presentkort and Evenemang only with those features in the plan', async () => {
+    window.history.replaceState(null, '', '/?restaurang=testkrogen')
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      url.includes('/site-config')
+        ? json(siteConfig({ features: { giftCards: true, events: true } }))
+        : json({ items: [] })))
+
+    renderSite()
+
+    await screen.findByRole('link', { name: 'Testkrogen - startsida' })
+    expect(screen.getAllByRole('link', { name: 'Presentkort' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: 'Evenemang' }).length).toBeGreaterThan(0)
+  })
+
   it('an unknown or suspended restaurant shows a neutral page, nothing else', async () => {
     window.history.replaceState(null, '', '/?restaurang=nobody')
     vi.stubGlobal('fetch', vi.fn(async () => json({ error: 'not found' }, 404)))
